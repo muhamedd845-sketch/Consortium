@@ -589,9 +589,30 @@ $orderedQuarters = array_merge(
     array_slice($baseQuarterOrder, 0, $firstIndex)
 );
 
-// First two quarters use Actual; last two use Forecast
-$firstTwoQuarters = array_slice($orderedQuarters, 0, 2);
-$lastTwoQuarters = array_slice($orderedQuarters, 2, 2);
+// Determine display rule dynamically: only the past quarter shows Actual; current and future show Forecast
+// Use earliest start dates (already computed) to detect the current quarter relative to today
+$quarterStarts = [];
+foreach ($orderedQuarters as $q) {
+    if (isset($quarterEarliestStart[$q])) {
+        $quarterStarts[$q] = $quarterEarliestStart[$q];
+    }
+}
+
+$todayTs = time();
+$currentIndex = null;
+foreach ($orderedQuarters as $idx => $q) {
+    $startTs = $quarterStarts[$q] ?? null;
+    if ($startTs !== null && $startTs <= $todayTs) {
+        // Keep advancing to the latest quarter that has started
+        $currentIndex = $idx;
+    }
+}
+// If none have started yet, default to the first quarter as the current frame
+if ($currentIndex === null) { $currentIndex = 0; }
+
+// The past quarter is the one immediately before the current quarter in the ordered list
+$pastIndex = ($currentIndex - 1 + count($orderedQuarters)) % count($orderedQuarters);
+$actualDisplayQuarters = [$orderedQuarters[$pastIndex]];
 
 // Recompute Section 3 category annual totals using the dynamic quarter ordering
 $recomputedCategoryTotals = [];
@@ -607,8 +628,8 @@ foreach ($section3Categories as $categoryName => $quarters) {
         $annualBudget += floatval($row['budget'] ?? 0);
         // Always sum Actual for variance calculation
         $annualActual += floatval($row['actual'] ?? 0);
-        // Preserve display of Actual+Forecast
-        if (in_array($q, $firstTwoQuarters, true)) {
+        // Preserve display of Actual+Forecast using the new rule: only past quarter counts as Actual
+        if (in_array($q, $actualDisplayQuarters, true)) {
             $annualActualPlusForecast += floatval($row['actual'] ?? 0);
         } else {
             $annualActualPlusForecast += floatval($row['forecast'] ?? 0);
@@ -1821,7 +1842,7 @@ if (!$included):
             <tr>
               <?php foreach ($orderedQuarters as $q): ?>
                 <th>Budget</th>
-                <?php if (in_array($q, $firstTwoQuarters, true)): ?>
+                <?php if (in_array($q, $actualDisplayQuarters, true)): ?>
                   <th>Actual</th>
                 <?php else: ?>
                   <th>Forecast</th>
@@ -1849,7 +1870,7 @@ if (!$included):
       <td data-label="<?php echo $q . ' Budget'; ?>">
         <?php echo isset($quarters[$q]) && isset($quarters[$q]['budget']) ? formatCurrency($quarters[$q]['budget'], $selectedCurrency) : '-'; ?>
       </td>
-      <?php if (in_array($q, $firstTwoQuarters, true)): ?>
+      <?php if (in_array($q, $actualDisplayQuarters, true)): ?>
         <td data-label="<?php echo $q . ' Actual'; ?>">
           <?php echo isset($quarters[$q]) && isset($quarters[$q]['actual']) ? formatCurrency($quarters[$q]['actual'], $selectedCurrency) : '-'; ?>
         </td>
@@ -2227,8 +2248,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const currentMonth = new Date().getMonth() + 1; // 1-12
         const currentQuarter = Math.ceil(currentMonth / 3); // 1, 2, 3, or 4
         
-        // Create quarter order based on your specific requirements:
-        // Q3, Q4, Q1, Q2 (Q3/Q4 Budget/Actual, Q1/Q2 Budget/Forecast)
+        // Create quarter order (display order used in the table)
+        // Default to Q3, Q4, Q1, Q2; adjust labels dynamically below
         const quarterOrder = ['Q3', 'Q4', 'Q1', 'Q2'];
         
         // Create header rows with correct column structure
@@ -2248,14 +2269,14 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         header2.push('Annual totals', '', '', ''); // Annual totals label + 3 empty cells
         
-        // Header3: Data type labels
+        // Header3: Data type labels (only the past quarter shows Actual)
         const header3 = [''];
+        const getQNum = q => parseInt(q.replace('Q',''), 10);
+        const pastQuarterNum = ((currentQuarter + 2) % 4) + 1; // previous quarter
         quarterOrder.forEach(quarter => {
-            if (quarter === 'Q3' || quarter === 'Q4') {
-                // Q3 and Q4 show Budget and Actual
+            if (getQNum(quarter) === pastQuarterNum) {
                 header3.push('Budget', 'Actual');
             } else {
-                // Q1 and Q2 show Budget and Forecast
                 header3.push('Budget', 'Forecast');
             }
         });
@@ -2357,14 +2378,20 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         // Calculate variance using (Budget - Actual) / Budget * 100
-        // For the Grand Total, we need to calculate actual from Q3 and Q4 actuals
-        const gtVar = (ab, aaf, q3a, q4a) => {
-          // Actual is the sum of Q3 actual and Q4 actual
-          const actual = q3a + q4a;
+        // Only the past quarter counts as Actual; others are Forecast
+        const gtVar = (ab, totals, pastQ) => {
+          let actual;
+          switch (pastQ) {
+            case 1: actual = totals.q1f; break; // Q1 second column value
+            case 2: actual = totals.q2f; break; // Q2 second column value
+            case 3: actual = totals.q3a; break; // Q3 second column value
+            case 4: actual = totals.q4a; break; // Q4 second column value
+            default: actual = 0;
+          }
           return ab !== 0 ? (((ab - actual) / ab) * 100) : 0;
         };
         ['ETB','USD','EUR'].forEach(cur => {
-          const v = gtVar(totalsByCur[cur].ab, totalsByCur[cur].aaf, totalsByCur[cur].q3a, totalsByCur[cur].q4a);
+          const v = gtVar(totalsByCur[cur].ab, totalsByCur[cur], pastQuarterNum);
           
           // Build grand total row data dynamically based on quarter order
           const grandTotalRow = ['Grand Total'];
