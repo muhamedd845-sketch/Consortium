@@ -1668,6 +1668,22 @@ if (!$included):
 
         <div class="filter-section">
           <div class="filter-title">
+            <i class="fas fa-percent"></i> Variance Formula
+          </div>
+          <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
+            <label style="display: flex; align-items: center; gap: 6px;">
+              <input type="radio" name="varianceFormula" value="budget_actual" checked>
+              <span>Budget vs Actual (Default)</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 6px;">
+              <input type="radio" name="varianceFormula" value="budget_actual_forecast">
+              <span>Budget vs Actual + Forecast</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="filter-section">
+          <div class="filter-title">
             <i class="fas fa-table"></i> Select Table View
           </div>
           <div class="relative">
@@ -1736,6 +1752,7 @@ if (!$included):
                 echo '<td>' . formatCurrency($grandTotalCalculated['actual'], $selectedCurrency) . '</td>';
                 echo '<td>' . formatCurrency($grandTotalCalculated['forecast'], $selectedCurrency) . '</td>';
                 echo '<td>' . formatCurrency($grandTotalCalculated['actual_plus_forecast'], $selectedCurrency) . '</td>';
+                // Default display uses Budget vs Actual; JS toggle will override dynamically
                 $grandTotalVariance = ($grandTotalCalculated['budget'] != 0) ? round((($grandTotalCalculated['budget'] - $grandTotalCalculated['actual']) / abs($grandTotalCalculated['budget'])) * 100, 2) : 0;
                 $varianceClass = $grandTotalVariance > 0 ? 'variance-positive' : ($grandTotalVariance < 0 ? 'variance-negative' : 'variance-zero');
                 echo '<td class="' . $varianceClass . '">' . $grandTotalVariance . '%</td>';
@@ -2841,6 +2858,20 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize with default year
     updatePageTitle('2025');
 
+    // Variance Formula toggle state
+    let varianceFormula = 'budget_actual'; // 'budget_actual' (default) or 'budget_actual_forecast'
+
+    // Hook up toggle
+    document.querySelectorAll('input[name="varianceFormula"]').forEach(r => {
+      r.addEventListener('change', () => {
+        varianceFormula = r.value;
+        // Recompute variances on both tables
+        if (typeof calculateTable1GrandTotal === 'function') calculateTable1GrandTotal();
+        if (typeof calculateTable2GrandTotal === 'function') calculateTable2GrandTotal();
+        if (typeof fillTable2AnnualTotals === 'function') fillTable2AnnualTotals();
+      });
+    });
+
     // Front-end Grand Total calculation for Table 2
     document.addEventListener('DOMContentLoaded', function() {
       function calculateTable2GrandTotal() {
@@ -2908,11 +2939,13 @@ document.addEventListener('DOMContentLoaded', function() {
           }
         });
 
-        // Calculate variance using (Budget - Actual) / Budget * 100
+        // Calculate variance using selected formula
         let variance = 0;
         if (annualBudgetTotal != 0) {
-          const actualTotal = q3ActualTotal + q4ActualTotal;
-          variance = (((annualBudgetTotal - actualTotal) / annualBudgetTotal) * 100);
+          const actualOnly = q3ActualTotal + q4ActualTotal;
+          const actualPlusForecast = actualForecastTotal; // already Q3A+Q4A+Q1F+Q2F
+          const compareAgainst = (varianceFormula === 'budget_actual_forecast') ? actualPlusForecast : actualOnly;
+          variance = (((annualBudgetTotal - compareAgainst) / annualBudgetTotal) * 100);
         }
 
         // Determine variance class based on global financial standards
@@ -2999,10 +3032,13 @@ document.addEventListener('DOMContentLoaded', function() {
           }
         });
 
-        // Calculate variance using (Budget - Actual) / Budget * 100
+        // Calculate variance using selected formula
         let variance = 0;
         if (grandBudget != 0) {
-          variance = (((grandBudget - grandActual) / grandBudget) * 100);
+          const compareAgainst = (typeof varianceFormula !== 'undefined' && varianceFormula === 'budget_actual_forecast')
+            ? grandActualForecast
+            : grandActual;
+          variance = (((grandBudget - compareAgainst) / grandBudget) * 100);
         }
         let varianceClass = 'variance-zero';
         if (variance > 0) varianceClass = 'variance-positive';
@@ -3054,12 +3090,13 @@ document.addEventListener('DOMContentLoaded', function() {
         totals.annualBudget += parseFloat(row.querySelector('td[data-label="Annual Budget"]').textContent.replace(/[^0-9.-]/g, '')) || 0;
         totals.actualForecast += parseFloat(row.querySelector('td[data-label="Actual + Forecast"]').textContent.replace(/[^0-9.-]/g, '')) || 0;
       });
-      // Calculate variance using (Budget - Actual) / Budget * 100
+      // Calculate variance using currently selected formula
       let variance = 0;
       if (totals.annualBudget !== 0) {
-        // For export we use Actual as the sum of Q3/Q4 actuals only
-        const actualTotal = totals.q3Actual + totals.q4Actual;
-        variance = (((totals.annualBudget - actualTotal) / totals.annualBudget) * 100);
+        const actualOnly = totals.q3Actual + totals.q4Actual;
+        const actualPlusForecast = totals.q3Actual + totals.q4Actual + totals.q1Forecast + totals.q2Forecast;
+        const compareAgainst = (varianceFormula === 'budget_actual_forecast') ? actualPlusForecast : actualOnly;
+        variance = (((totals.annualBudget - compareAgainst) / totals.annualBudget) * 100);
       }
       return [
         'Grand Total',
@@ -3180,12 +3217,13 @@ document.addEventListener('DOMContentLoaded', function() {
       const annualBudget = q3Budget + q4Budget + q1Budget + q2Budget;
       const actualForecast = q3Actual + q4Actual + q1Forecast + q2Forecast;
 
-      // Calculate variance using (Budget - Actual) / Budget * 100
+      // Calculate variance using selected formula
       let variance = 0;
       if (annualBudget !== 0) {
-        // Calculate actual total from Q3 and Q4 actuals only
-        const actualTotal = q3Actual + q4Actual;
-        variance = ((annualBudget - actualTotal) / annualBudget) * 100;
+        const actualOnly = q3Actual + q4Actual;
+        const actualPlusForecast = q3Actual + q4Actual + q1Forecast + q2Forecast;
+        const compareAgainst = (varianceFormula === 'budget_actual_forecast') ? actualPlusForecast : actualOnly;
+        variance = ((annualBudget - compareAgainst) / annualBudget) * 100;
       }
       let varianceClass = 'variance-zero';
       if (variance > 0) varianceClass = 'variance-positive';

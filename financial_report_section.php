@@ -494,11 +494,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                             }
                             */
                             
-                            // Update the quarter row: increase actual by amount, recalc forecast to keep Budget = Actual + Forecast, recompute actual_plus_forecast
-                            // MySQL evaluates SET clauses left to right; forecast uses the updated actual value
+                            // Update the quarter row: increase actual by amount, and decrease forecast by the same amount (preserve user-entered base forecast)
+                            // MySQL evaluates SET clauses left to right; forecast sees the previous actual value
                             $updateBudgetQuery = "UPDATE budget_data SET 
                                 actual = COALESCE(actual, 0) + ?,
-                                forecast = GREATEST(COALESCE(budget, 0) - COALESCE(actual, 0), 0),
+                                forecast = GREATEST(COALESCE(forecast, 0) - ?, 0),
                                 actual_plus_forecast = COALESCE(actual, 0) + COALESCE(forecast, 0)
                                 WHERE year2 = ? AND category_name = ? AND period_name = ?
                                 AND ? BETWEEN start_date AND end_date";
@@ -507,12 +507,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                             if ($userCluster) {
                                 $updateBudgetQuery .= " AND cluster = ?";
                                 $updateStmt = $conn->prepare($updateBudgetQuery);
-                                // Params: 1 double (amount), 1 integer (year), 3 strings (categoryName, quarter, transactionDate), 1 string (userCluster)
-                                $updateStmt->bind_param("dissss", $amount, $year, $categoryName, $quarter, $transactionDate, $userCluster);
+                                // Params: 2 doubles (amount for actual increase and forecast decrease), 1 integer (year), 3 strings (categoryName, quarter, transactionDate), 1 string (userCluster)
+                                $updateStmt->bind_param("ddissss", $amount, $amount, $year, $categoryName, $quarter, $transactionDate, $userCluster);
                             } else {
                                 $updateStmt = $conn->prepare($updateBudgetQuery);
-                                // Params: 1 double (amount), 1 integer (year), 3 strings (categoryName, quarter, transactionDate)
-                                $updateStmt->bind_param("disss", $amount, $year, $categoryName, $quarter, $transactionDate);
+                                // Params: 2 doubles (amount for actual increase and forecast decrease), 1 integer (year), 3 strings (categoryName, quarter, transactionDate)
+                                $updateStmt->bind_param("ddisss", $amount, $amount, $year, $categoryName, $quarter, $transactionDate);
                             }
                             
                             if ($updateStmt->execute()) {
