@@ -2861,20 +2861,29 @@ document.addEventListener('DOMContentLoaded', function() {
     // Variance Formula toggle state
     let varianceFormula = 'budget_actual'; // 'budget_actual' (default) or 'budget_actual_forecast'
 
+    // Initialize from any pre-selected radio input if present
+    (function initializeVarianceFormulaFromUI() {
+      const selectedRadio = document.querySelector('input[name="varianceFormula"]:checked');
+      if (selectedRadio && (selectedRadio.value === 'budget_actual' || selectedRadio.value === 'budget_actual_forecast')) {
+        varianceFormula = selectedRadio.value;
+      }
+    })();
+
     // Hook up toggle
     document.querySelectorAll('input[name="varianceFormula"]').forEach(r => {
       r.addEventListener('change', () => {
         varianceFormula = r.value;
         // Recompute variances on both tables
-        if (typeof calculateTable1GrandTotal === 'function') calculateTable1GrandTotal();
-        if (typeof calculateTable2GrandTotal === 'function') calculateTable2GrandTotal();
-        if (typeof fillTable2AnnualTotals === 'function') fillTable2AnnualTotals();
+        if (typeof window.calculateTable1GrandTotal === 'function') window.calculateTable1GrandTotal();
+        if (typeof window.calculateTable2GrandTotal === 'function') window.calculateTable2GrandTotal();
+        if (typeof window.fillTable2AnnualTotals === 'function') window.fillTable2AnnualTotals();
       });
     });
 
     // Front-end Grand Total calculation for Table 2
     document.addEventListener('DOMContentLoaded', function() {
-      function calculateTable2GrandTotal() {
+      // Expose function globally so other listeners (like variance toggle) can call it
+      window.calculateTable2GrandTotal = function() {
         const table = document.querySelector('#section3-table .vertical-table');
         if (!table) return;
         
@@ -2982,24 +2991,25 @@ document.addEventListener('DOMContentLoaded', function() {
 
       // Run on load and when switching tables
 
-      calculateTable2GrandTotal();
+      window.calculateTable2GrandTotal();
       document.getElementById('tableSelection').addEventListener('change', function() {
         if (this.value === 'section3') {
-          setTimeout(calculateTable2GrandTotal, 100); // Wait for table to show
+          setTimeout(window.calculateTable2GrandTotal, 100); // Wait for table to show
         }
       });
       
       // Also recalculate when year changes
       document.getElementById('yearFilter').addEventListener('change', function() {
         if (document.getElementById('tableSelection').value === 'section3') {
-          setTimeout(calculateTable2GrandTotal, 100);
+          setTimeout(window.calculateTable2GrandTotal, 100);
         }
       });
     });
 
     // Add after Table 1 rendering (inside <script> tag)
     document.addEventListener('DOMContentLoaded', function() {
-      function calculateTable1GrandTotal() {
+      // Expose function globally so other listeners (like variance toggle) can call it
+      window.calculateTable1GrandTotal = function() {
         const table = document.querySelector('#section2-table .vertical-table');
         if (!table) return;
 
@@ -3063,7 +3073,7 @@ document.addEventListener('DOMContentLoaded', function() {
         table.querySelector('tbody').appendChild(grandTotalRow);
       }
 
-      calculateTable1GrandTotal();
+      window.calculateTable1GrandTotal();
       // Recalculate if table changes (add listeners if needed)
     });
 
@@ -3197,7 +3207,8 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     document.addEventListener('DOMContentLoaded', function() {
-  function fillTable2AnnualTotals() {
+  // Expose function globally so other listeners (like variance toggle) can call it
+  window.fillTable2AnnualTotals = function() {
     const table = document.querySelector('#section3-table .vertical-table');
     if (!table) return;
 
@@ -3236,7 +3247,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  fillTable2AnnualTotals();
+  window.fillTable2AnnualTotals();
   // Recalculate if table changes (add listeners if needed)
 });
   </script>
