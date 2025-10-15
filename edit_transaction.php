@@ -220,8 +220,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             // Calculate new actual value (subtract the original amount)
             $newActual = max(0, $currentActual - $originalAmount);
-            // Recalculate forecast to keep Budget = Actual + Forecast
-            $newForecast = max(0, ($currentBudget ?? 0) - $newActual);
+            // Add the original amount back to forecast to preserve user-entered base
+            $newForecast = max(0, ($currentForecast ?? 0) + $originalAmount);
             // Calculate new actual_plus_forecast using the recalculated forecast
             $newActualPlusForecast = $newActual + $newForecast;
             
@@ -530,8 +530,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 // Calculate new actual value (add the new amount)
                 $newActual = max(0, $currentActual + $amount);
-                // Recalculate forecast to keep Budget = Actual + Forecast
-                $newForecast = max(0, ($currentBudget ?? 0) - $newActual);
+                // Subtract only the delta from forecast to preserve user-entered base
+                $newForecast = max(0, ($currentForecast ?? 0) - $amount);
                 
                 // Calculate new actual_plus_forecast using recalculated forecast
                 $newActualPlusForecast = $newActual + $newForecast;

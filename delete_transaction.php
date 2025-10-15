@@ -153,8 +153,8 @@ if (isset($_GET['id']) && !empty($_GET['id'])) {
 
             // Subtract amount from actual (never go below 0) - this is the rollback
             $newActual = max(0, $currentActual - $amount);
-            // Recalculate forecast to keep Budget = Actual + Forecast
-            $newForecast = max(0, $currentBudget - $newActual);
+            // Add the deleted amount back to forecast to preserve user-entered base
+            $newForecast = max(0, $currentForecast + $amount);
             $newActualPlusForecast = $newActual + $newForecast;
             $newVariancePercentage = 0;
             if ($currentBudget > 0) {

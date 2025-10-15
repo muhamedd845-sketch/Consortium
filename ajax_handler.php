@@ -382,11 +382,11 @@ try {
                 }
                 */
                 
-                // Update the quarter row: increase actual by amount, do NOT auto-update forecast, recompute actual_plus_forecast
+                // Update the quarter row: increase actual by amount, and decrease forecast by the same amount (do NOT set forecast = budget - actual)
                 // MySQL evaluates SET clauses left to right, so later expressions see updated column values
                 $updateBudgetQuery = "UPDATE budget_data SET 
                     actual = COALESCE(actual, 0) + ?,
-                    forecast = GREATEST(COALESCE(budget, 0) - COALESCE(actual, 0), 0),
+                    forecast = GREATEST(COALESCE(forecast, 0) - ?, 0),
                     actual_plus_forecast = COALESCE(actual, 0) + COALESCE(forecast, 0)
                     WHERE year2 = ? AND category_name = ? AND period_name = ?
                     AND ? BETWEEN start_date AND end_date";
@@ -395,12 +395,12 @@ try {
                 if ($userCluster) {
                     $updateBudgetQuery .= " AND cluster = ?";
                     $updateStmt = $conn->prepare($updateBudgetQuery);
-                    // Params: 1 double (amount), 1 integer (year), 4 strings (categoryName, quarter, transactionDate, userCluster)
-                    $updateStmt->bind_param("dissss", $amount, $year, $categoryName, $quarter, $transactionDate, $userCluster);
+                    // Params: 2 doubles (amount for actual increase and forecast decrease), 1 integer (year), 4 strings (categoryName, quarter, transactionDate, userCluster)
+                    $updateStmt->bind_param("ddissss", $amount, $amount, $year, $categoryName, $quarter, $transactionDate, $userCluster);
                 } else {
                     $updateStmt = $conn->prepare($updateBudgetQuery);
-                    // Params: 1 double (amount), 1 integer (year), 3 strings (categoryName, quarter, transactionDate)
-                    $updateStmt->bind_param("disss", $amount, $year, $categoryName, $quarter, $transactionDate);
+                    // Params: 2 doubles (amount for actual increase and forecast decrease), 1 integer (year), 3 strings (categoryName, quarter, transactionDate)
+                    $updateStmt->bind_param("ddisss", $amount, $amount, $year, $categoryName, $quarter, $transactionDate);
                 }
                 
                 if ($updateStmt->execute()) {
@@ -858,16 +858,16 @@ try {
                     throw new Exception("Failed to delete transaction: " . $deleteStmt->error);
                 }
                 
-                // Update the budget_data table to reduce actual spending and recalc forecast for the quarter
+                // Update the budget_data table to reduce actual spending and add the deleted amount back to forecast for the quarter
                 if ($budgetId) {
                     $updateBudgetQuery = "UPDATE budget_data SET 
                         actual = GREATEST(COALESCE(actual, 0) - ?, 0),
-                        forecast = GREATEST(COALESCE(budget, 0) - COALESCE(actual, 0), 0),
+                        forecast = COALESCE(forecast, 0) + ?,
                         actual_plus_forecast = COALESCE(actual, 0) + COALESCE(forecast, 0)
                         WHERE id = ?";
                     
                     $updateStmt = $conn->prepare($updateBudgetQuery);
-                    $updateStmt->bind_param("di", $amount, $budgetId);
+                    $updateStmt->bind_param("ddi", $amount, $amount, $budgetId);
                     
                     if (!$updateStmt->execute()) {
                         throw new Exception("Failed to update budget data: " . $updateStmt->error);
